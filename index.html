@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>面试准考证批量打印</title>
+  <title>准考证批量打印</title>
   <!-- SheetJS -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   <!-- html2canvas + jsPDF -->
@@ -165,7 +165,7 @@
       width: 210mm;
       min-height: 297mm;
       background: white;
-      padding: 1cm;
+      padding: 1cm 1.5cm;
       box-shadow: 0 12px 40px rgba(0,0,0,0.08);
       border-radius: 8px;
       display: flex;
@@ -177,8 +177,8 @@
 
     .page-container .cut-line {
       position: absolute;
-      left: 1cm;
-      right: 1cm;
+      left: 1.5cm;
+      right: 1.5cm;
       top: 50%;
       transform: translateY(-50%);
       border: none;
@@ -286,7 +286,7 @@
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 6px 12px;
-      align-items: start;
+      align-items: center;  /* 改为 center，让照片框垂直居中 */
       width: 100%;
     }
 
@@ -303,7 +303,7 @@
       grid-column: 2 / 3;
       grid-row: 1 / 4;
       justify-self: end;
-      align-self: start;
+      align-self: center;   /* 垂直居中 */
       width: 3.2cm;
       height: 4.2cm;
       border: 2px solid #1a2744;
@@ -415,7 +415,7 @@
       .page-container {
         box-shadow: none;
         border-radius: 0;
-        padding: 1cm;
+        padding: 1cm 1.5cm;
         margin: 0 auto;
         width: 210mm;
         height: 297mm;
@@ -430,8 +430,8 @@
       .page-container .cut-line {
         border-top: 2px dashed #3a4b66;
         opacity: 0.8;
-        left: 1cm;
-        right: 1cm;
+        left: 1.5cm;
+        right: 1.5cm;
         top: 50%;
         transform: translateY(-50%);
       }
@@ -445,7 +445,7 @@
     }
 
     @media screen and (max-width: 800px) {
-      .page-container { width: 100%; min-height: auto; padding: 1cm 0.6cm; }
+      .page-container { width: 100%; min-height: auto; padding: 1cm 1.5cm; }
       .empty-state { width: 100%; min-height: auto; padding: 1cm; }
       .toolbar-group input#titleInput {
         width: 100%;
@@ -504,7 +504,7 @@
     <div class="toolbar-group">
       <span class="page-info" id="pageInfo">共 0 页</span>
       <button class="btn" onclick="window.print()">🖨️ 打印</button>
-      <button class="btn btn-success" id="savePdfBtn">📄 保存PDF（页数多，耗时）</button>
+      <button class="btn btn-success" id="savePdfBtn">📄 保存PDF</button>
     </div>
   </div>
 
@@ -776,7 +776,7 @@
     function generateSampleData(count) {
       const surnames = ['张', '王', '李', '刘', '陈', '杨', '赵', '黄', '周', '吴'];
       const givenNames = ['伟', '芳', '敏', '静', '丽', '强', '磊', '洋', '勇', '艳'];
-      const positions = ['小学语文', '初中语文', '高中语文',];
+      const positions = ['小学语文', '初中语文', '高中语文'];
       const codes = ['A1001', 'A1002', 'B2001', 'B2002', 'C3001'];
 
       const data = [];
@@ -803,7 +803,7 @@
       renderAllPages(data);
     });
 
-    // ===== 保存为PDF（逐页渲染） =====
+    // ===== 保存为PDF =====
     savePdfBtn.addEventListener('click', async function() {
       const pages = container.querySelectorAll('.page-container');
       if (pages.length === 0) {
@@ -811,7 +811,6 @@
         return;
       }
 
-      // 显示加载遮罩
       pdfLoading.style.display = 'flex';
       pdfProgress.textContent = '准备中...';
 
@@ -824,28 +823,24 @@
           pdfProgress.textContent = `正在渲染第 ${i + 1}/${totalPages} 页...`;
 
           const page = pages[i];
-          // 克隆页面
           const clone = page.cloneNode(true);
           clone.style.boxShadow = 'none';
           clone.style.borderRadius = '0';
           clone.style.margin = '0';
-          clone.style.padding = '1cm';
+          clone.style.padding = '1cm 1.5cm';
           clone.style.width = '210mm';
           clone.style.minHeight = '297mm';
           clone.style.position = 'relative';
           clone.style.background = 'white';
 
-          // 移除页码
           const pageNum = clone.querySelector('.page-number');
           if (pageNum) pageNum.style.display = 'none';
 
-          // 临时添加到页面
           const tempDiv = document.createElement('div');
           tempDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:210mm;';
           tempDiv.appendChild(clone);
           document.body.appendChild(tempDiv);
 
-          // 使用 html2canvas 渲染（降低质量以减小文件）
           const canvas = await html2canvas(clone, {
             scale: 1.2,
             useCORS: true,
@@ -859,7 +854,6 @@
 
           document.body.removeChild(tempDiv);
 
-          // 转为 JPEG 并添加（降低质量）
           const imgData = canvas.toDataURL('image/jpeg', 0.75);
 
           if (i > 0) {
