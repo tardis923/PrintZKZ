@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>面试准考证批量打印</title>
+  <!-- SheetJS -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <!-- html2canvas + jsPDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #e9ecf3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px;
+      font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+    }
+
+    /* ===== 工具栏 ===== */
+    .toolbar {
+      background: white;
+      border-radius: 24px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+      padding: 18px 28px;
+      margin-bottom: 30px;
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      position: relative;
+      z-index: 10;
+    }
+
+    .toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px 24px;
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 6px 12px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-group label {
+      font-weight: 500;
+      color: #1a2744;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+
+    .toolbar-group input[type="file"] {
+      font-size: 0.85rem;
+      padding: 5px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 30px;
+      background: #f8fafc;
+    }
+
+    .toolbar-group input[type="number"],
+    .toolbar-group input[type="text"] {
+      padding: 5px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 30px;
+      width: 80px;
+      font-size: 0.9rem;
+      background: white;
+    }
+
+    .toolbar-group input#titleInput {
+      width: 420px;
+      min-width: 300px;
+    }
+
+    .toolbar-group input[type="text"] {
+      width: 140px;
+    }
+
+    .toolbar-group textarea {
+      padding: 6px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      background: white;
+      font-family: inherit;
+      resize: vertical;
+      width: 100%;
+      min-height: 60px;
+      max-height: 120px;
+    }
+
+    .toolbar-group .page-info {
+      font-size: 0.9rem;
+      color: #1a2744;
+      font-weight: 500;
+    }
+
+    .btn {
+      background: #1a2744;
+      color: white;
+      border: none;
+      padding: 7px 20px;
+      border-radius: 40px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    .btn:hover { background: #2e3f64; transform: scale(0.97); }
+    .btn-outline {
+      background: white;
+      color: #1a2744;
+      border: 1px solid #b8c7df;
+    }
+    .btn-outline:hover { background: #f0f4fe; }
+    .btn-success {
+      background: #1a7a44;
+      color: white;
+    }
+    .btn-success:hover { background: #1a8a4a; }
+
+    .toolbar-notice-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 12px 20px;
+      padding-top: 10px;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .toolbar-notice-row .toolbar-group {
+      flex: 1 1 300px;
+    }
+
+    .toolbar-notice-row .toolbar-group label {
+      align-self: flex-start;
+      margin-top: 6px;
+    }
+
+    /* ===== 批量页面容器 ===== */
+    #pagesContainer {
+      width: 100%;
+      max-width: 210mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 30px;
+    }
+
+    /* ===== 单个A4页面 ===== */
+    .page-container {
+      width: 210mm;
+      min-height: 297mm;
+      background: white;
+      padding: 1cm;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .page-container .cut-line {
+      position: absolute;
+      left: 1cm;
+      right: 1cm;
+      top: 50%;
+      transform: translateY(-50%);
+      border: none;
+      border-top: 2px dashed #6b7f9e;
+      opacity: 0.6;
+      margin: 0;
+      padding: 0;
+      height: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .card-top, .card-bottom {
+      flex: 1 1 50%;
+      min-height: 50%;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-align: center;
+      color: #0b1a33;
+      margin: 0;
+      border: none;
+      background: transparent;
+      width: 100%;
+      font-family: inherit;
+      flex-shrink: 0;
+      cursor: default;
+    }
+
+    .card-top .card-title {
+      margin-top: -0.3cm;
+      margin-bottom: 10px;
+    }
+
+    .card-bottom .card-title {
+      padding-top: 1.5cm;
+      margin-bottom: 10px;
+    }
+
+    .double-border {
+      border: 3px double #1a2744;
+      border-radius: 4px;
+      padding: 14px 16px 10px 16px;
+      background: white;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .info-items {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 18px;
+    }
+
+    .info-item {
+      display: flex;
+      align-items: baseline;
+      gap: 0px;
+      line-height: 1.5;
+    }
+
+    .info-item label {
+      font-weight: 600;
+      color: #0b1a33;
+      white-space: nowrap;
+      display: inline-block;
+      width: 5.8em;
+      flex-shrink: 0;
+      text-align: justify;
+      text-align-last: justify;
+      letter-spacing: 0.05em;
+    }
+
+    .info-item label.short {
+      width: 5.8em;
+      letter-spacing: 0.05em;
+    }
+
+    .info-item .colon {
+      font-weight: 600;
+      color: #0b1a33;
+      flex-shrink: 0;
+      margin-left: -0.1em;
+    }
+
+    .info-item .value {
+      font-weight: 500;
+      color: #0a1a2e;
+      padding: 0 4px;
+      min-width: 70px;
+      display: inline-block;
+      background: #fafcff;
+      border-bottom: none;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 12px;
+      align-items: start;
+      width: 100%;
+    }
+
+    .info-row-special {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .info-row-special .info-item { flex: 0 0 auto; }
+    .info-row-special .spacer { width: 6ch; display: inline-block; }
+
+    .photo-box {
+      grid-column: 2 / 3;
+      grid-row: 1 / 4;
+      justify-self: end;
+      align-self: start;
+      width: 3.2cm;
+      height: 4.2cm;
+      border: 2px solid #1a2744;
+      border-radius: 4px;
+      background: #f4f7fc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: #3f4e6b;
+      margin-right: 0.2cm;
+      flex-shrink: 0;
+      background-image: repeating-linear-gradient(45deg, #e2e8f0 0px, #e2e8f0 2px, #f4f7fc 2px, #f4f7fc 8px);
+      background-size: 12px 12px;
+    }
+    .photo-box span {
+      background: rgba(255,255,255,0.7);
+      padding: 4px 6px;
+      border-radius: 20px;
+      font-weight: 500;
+      font-size: 11px;
+      color: #1a2744;
+    }
+
+    .notice-area {
+      margin-top: 10px;
+      border-top: 1px dashed #b0c3df;
+      padding-top: 10px;
+      font-size: 13px;
+      color: #1a2744;
+      line-height: 1.6;
+      background: #fafcff;
+      border-radius: 4px;
+      padding-left: 6px;
+      padding-right: 6px;
+      flex-shrink: 0;
+      cursor: default;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .page-number {
+      text-align: center;
+      font-size: 12px;
+      color: #888;
+      margin-top: 6px;
+      flex-shrink: 0;
+    }
+
+    /* ===== 空状态 ===== */
+    .empty-state {
+      width: 210mm;
+      min-height: 297mm;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      font-size: 18px;
+      padding: 1cm;
+    }
+    .empty-state .icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+
+    /* ===== 加载遮罩 ===== */
+    #pdfLoading {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: white;
+      font-size: 18px;
+    }
+    #pdfLoading .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 20px;
+    }
+    #pdfLoading .progress-text {
+      font-size: 14px;
+      color: rgba(255,255,255,0.8);
+      margin-top: 10px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ===== 打印样式 ===== */
+    @media print {
+      body { background: white; padding: 0; margin: 0; }
+      .toolbar { display: none !important; }
+      #pagesContainer { gap: 0; max-width: 100%; }
+      .page-container {
+        box-shadow: none;
+        border-radius: 0;
+        padding: 1cm;
+        margin: 0 auto;
+        width: 210mm;
+        height: 297mm;
+        min-height: 297mm;
+        page-break-after: always;
+        break-after: page;
+      }
+      .page-container:last-child {
+        page-break-after: avoid;
+        break-after: avoid;
+      }
+      .page-container .cut-line {
+        border-top: 2px dashed #3a4b66;
+        opacity: 0.8;
+        left: 1cm;
+        right: 1cm;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+      .double-border { border-color: #000; }
+      .photo-box { background: #f0f3f9; border-color: #000; }
+      .notice-area { background: white; }
+      .card-title { color: #000; }
+      .info-item .value { border-bottom: none; }
+      .page-number { display: none; }
+      .empty-state { display: none; }
+    }
+
+    @media screen and (max-width: 800px) {
+      .page-container { width: 100%; min-height: auto; padding: 1cm 0.6cm; }
+      .empty-state { width: 100%; min-height: auto; padding: 1cm; }
+      .toolbar-group input#titleInput {
+        width: 100%;
+        min-width: unset;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== 加载遮罩 ===== -->
+<div id="pdfLoading">
+  <div class="spinner"></div>
+  <span>正在生成PDF，请稍候...</span>
+  <div class="progress-text" id="pdfProgress">准备中...</div>
+</div>
+
+<!-- ===== 工具栏 ===== -->
+<div class="toolbar" id="toolbar">
+  <div class="toolbar-row">
+    <div class="toolbar-group">
+      <label for="titleInput">标题</label>
+      <input type="text" id="titleInput" value="2026年景德镇市市直中小学教师招聘面试准考证" placeholder="标题">
+    </div>
+    <div class="toolbar-group">
+      <label for="fontSizeInput">标题字号</label>
+      <input type="number" id="fontSizeInput" value="26" min="12" max="30" step="1"> px
+    </div>
+    <div class="toolbar-group">
+      <label for="infoFontSizeInput">信息字号</label>
+      <input type="number" id="infoFontSizeInput" value="18" min="10" max="18" step="1"> px
+    </div>
+    <div class="toolbar-group">
+      <label for="noticeFontSizeInput">须知字号</label>
+      <input type="number" id="noticeFontSizeInput" value="15" min="8" max="15" step="1"> px
+    </div>
+  </div>
+
+  <div class="toolbar-row">
+    <div class="toolbar-group">
+      <label>面试日期</label>
+      <input type="text" id="dateInput" value="详见面试公告" placeholder="日期" style="width:140px;">
+    </div>
+    <div class="toolbar-group">
+      <label>面试考点</label>
+      <input type="text" id="locationInput" value="景德镇一中" placeholder="考点" style="width:140px;">
+    </div>
+  </div>
+
+  <div class="toolbar-row">
+    <div class="toolbar-group">
+      <label for="fileInput">导入xls</label>
+      <input type="file" id="fileInput" accept=".xls,.xlsx,.csv">
+      <button class="btn btn-outline" id="loadSampleBtn">示例数据</button>
+    </div>
+    <div class="toolbar-group">
+      <span class="page-info" id="pageInfo">共 0 页</span>
+      <button class="btn" onclick="window.print()">🖨️ 打印</button>
+      <button class="btn btn-success" id="savePdfBtn">📄 保存PDF（页数多，耗时）</button>
+    </div>
+  </div>
+
+  <div class="toolbar-notice-row">
+    <div class="toolbar-group" style="flex:1 1 100%;">
+      <label for="noticeInput" style="align-self:flex-start;margin-top:4px;">面试须知</label>
+      <textarea id="noticeInput" rows="3" placeholder="输入面试须知内容，支持多行...">面试须知：
+1.考生应于面试当日上午8∶30到达面试考点，迟到15分钟后不得入场；
+2.考生凭本证和有效居民身份证参加面试；
+3.面试考生不得携带教材、相关资料、笔记本电脑、MP3、MP4、智能眼镜、智能手表、手环等摄影摄像器材进入考点；
+4.进入考场时考生只允许带在准备室完成的试讲稿（须用考场发给的备课纸）；
+5.面试时间会持续到下午，请考生自备午餐。</textarea>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 页面容器 ===== -->
+<div id="pagesContainer">
+  <div class="empty-state" id="emptyState">
+    <div class="icon">📋</div>
+    <p>请导入数据生成准考证</p>
+    <p style="font-size:14px;color:#bbb;margin-top:10px;">支持 .xls .xlsx .csv 格式</p>
+  </div>
+</div>
+
+<script>
+  (function() {
+    // ===== DOM 引用 =====
+    const container = document.getElementById('pagesContainer');
+    const emptyState = document.getElementById('emptyState');
+    const titleInput = document.getElementById('titleInput');
+    const fontSizeInput = document.getElementById('fontSizeInput');
+    const infoFontSizeInput = document.getElementById('infoFontSizeInput');
+    const noticeFontSizeInput = document.getElementById('noticeFontSizeInput');
+    const fileInput = document.getElementById('fileInput');
+    const dateInput = document.getElementById('dateInput');
+    const locationInput = document.getElementById('locationInput');
+    const noticeInput = document.getElementById('noticeInput');
+    const pageInfo = document.getElementById('pageInfo');
+    const savePdfBtn = document.getElementById('savePdfBtn');
+    const pdfLoading = document.getElementById('pdfLoading');
+    const pdfProgress = document.getElementById('pdfProgress');
+
+    // ===== 全局数据 =====
+    let allData = [];
+
+    // ===== 生成单个准考证卡片HTML =====
+    function createCardHTML(data, isTop) {
+      const titleText = titleInput.value || '准考证';
+      const dateVal = dateInput.value || '__________';
+      const locVal = locationInput.value || '__________';
+      const noticeText = noticeInput.value || '（请填写面试须知）';
+
+      const name = data.name || '______';
+      const idnumber = data.idnumber || data['身份证号'] || '______';
+      const position = data.position || data['报考岗位'] || '______';
+      const code = data.code || data['岗位代码'] || '______';
+      const number = data.number || data['编号'] || '______';
+      const lottery = (data.lottery && data.lottery !== '______') ? data.lottery : '';
+
+      const cardClass = isTop ? 'card-top' : 'card-bottom';
+
+      return `
+        <div class="${cardClass}" data-card="${isTop ? 'top' : 'bottom'}">
+          <div class="card-title">${titleText}</div>
+          <div class="double-border">
+            <div class="info-grid">
+              <div class="info-items">
+                <div class="info-item"><label class="short">姓 名</label><span class="colon">：</span><span class="value" data-field="name">${name}</span></div>
+                <div class="info-item"><label>身份证号</label><span class="colon">：</span><span class="value" data-field="idnumber">${idnumber}</span></div>
+                <div class="info-item"><label>报考岗位</label><span class="colon">：</span><span class="value" data-field="position">${position}</span></div>
+                <div class="info-item"><label>岗位代码</label><span class="colon">：</span><span class="value" data-field="code">${code}</span></div>
+                <div class="info-row-special">
+                  <div class="info-item"><label class="short">编 号</label><span class="colon">：</span><span class="value" data-field="number">${number}</span></div>
+                  <span class="spacer"></span>
+                  <div class="info-item"><label>抽签顺序</label><span class="colon">：</span><span class="value" data-field="lottery">${lottery}</span></div>
+                </div>
+                <div class="info-item"><label>面试日期</label><span class="colon">：</span><span class="value" data-field="date">${dateVal}</span></div>
+                <div class="info-item"><label>面试考点</label><span class="colon">：</span><span class="value" data-field="location">${locVal}</span></div>
+              </div>
+              <div class="photo-box"><span>📸 照片</span></div>
+            </div>
+          </div>
+          <div class="notice-area">${noticeText}</div>
+        </div>
+      `;
+    }
+
+    // ===== 生成单个A4页面HTML =====
+    function createPageHTML(data1, data2, pageIndex, totalPages) {
+      let html = `
+        <div class="page-container" data-page="${pageIndex}">
+          <hr class="cut-line">
+      `;
+
+      html += createCardHTML(data1, true);
+
+      if (data2) {
+        html += createCardHTML(data2, false);
+      } else {
+        html += `
+          <div class="card-bottom" style="min-height:50%;">
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:14px;border:1px dashed #eee;border-radius:4px;margin:10px 0;">
+              （空白）
+            </div>
+          </div>
+        `;
+      }
+
+      html += `
+          <div class="page-number">第 ${pageIndex + 1} / ${totalPages} 页</div>
+        </div>
+      `;
+
+      return html;
+    }
+
+    // ===== 渲染所有页面 =====
+    function renderAllPages(dataArray) {
+      allData = dataArray;
+
+      emptyState.style.display = 'none';
+
+      const pages = container.querySelectorAll('.page-container');
+      pages.forEach(el => el.remove());
+
+      if (!dataArray || dataArray.length === 0) {
+        emptyState.style.display = 'flex';
+        pageInfo.textContent = '共 0 页';
+        return;
+      }
+
+      const totalPages = Math.ceil(dataArray.length / 2);
+      let html = '';
+
+      for (let i = 0; i < dataArray.length; i += 2) {
+        const data1 = dataArray[i];
+        const data2 = dataArray[i + 1] || null;
+        const pageIndex = Math.floor(i / 2);
+        html += createPageHTML(data1, data2, pageIndex, totalPages);
+      }
+
+      container.insertAdjacentHTML('beforeend', html);
+
+      applyFontSizes();
+
+      pageInfo.textContent = `共 ${totalPages} 页（${dataArray.length} 人）`;
+    }
+
+    // ===== 应用字号 =====
+    function applyFontSizes() {
+      const pages = container.querySelectorAll('.page-container');
+
+      let titleSize = parseInt(fontSizeInput.value, 10);
+      if (isNaN(titleSize) || titleSize < 12) titleSize = 20;
+      if (titleSize > 30) titleSize = 30;
+      fontSizeInput.value = titleSize;
+
+      pages.forEach(page => {
+        const titles = page.querySelectorAll('.card-title');
+        titles.forEach(el => el.style.fontSize = titleSize + 'px');
+      });
+
+      let infoSize = parseInt(infoFontSizeInput.value, 10);
+      if (isNaN(infoSize) || infoSize < 10) infoSize = 18;
+      if (infoSize > 18) infoSize = 18;
+      infoFontSizeInput.value = infoSize;
+
+      pages.forEach(page => {
+        const infoItems = page.querySelectorAll('.info-items');
+        infoItems.forEach(el => el.style.fontSize = infoSize + 'px');
+      });
+
+      let noticeSize = parseInt(noticeFontSizeInput.value, 10);
+      if (isNaN(noticeSize) || noticeSize < 8) noticeSize = 13;
+      if (noticeSize > 15) noticeSize = 15;
+      noticeFontSizeInput.value = noticeSize;
+
+      pages.forEach(page => {
+        const notices = page.querySelectorAll('.notice-area');
+        notices.forEach(el => el.style.fontSize = noticeSize + 'px');
+      });
+    }
+
+    // ===== 监听字号变化 =====
+    fontSizeInput.addEventListener('input', applyFontSizes);
+    infoFontSizeInput.addEventListener('input', applyFontSizes);
+    noticeFontSizeInput.addEventListener('input', applyFontSizes);
+
+    // ===== 标题同步 =====
+    titleInput.addEventListener('input', function() {
+      if (allData.length > 0) {
+        renderAllPages(allData);
+      }
+    });
+
+    dateInput.addEventListener('input', function() {
+      if (allData.length > 0) {
+        renderAllPages(allData);
+      }
+    });
+
+    locationInput.addEventListener('input', function() {
+      if (allData.length > 0) {
+        renderAllPages(allData);
+      }
+    });
+
+    noticeInput.addEventListener('input', function() {
+      if (allData.length > 0) {
+        renderAllPages(allData);
+      }
+    });
+
+    // ===== 数据标准化 =====
+    function normalizeRow(row) {
+      const mapKey = (key) => {
+        const lower = key.trim();
+        if (lower.includes('姓名') || lower === 'name') return 'name';
+        if (lower.includes('身份证') || lower === 'idnumber') return 'idnumber';
+        if (lower.includes('报考岗位') || lower === 'position') return 'position';
+        if (lower.includes('岗位代码') || lower === 'code') return 'code';
+        if (lower.includes('编号') || lower === 'number') return 'number';
+        if (lower.includes('抽签顺序') || lower === 'lottery') return 'lottery';
+        return lower;
+      };
+      const result = {};
+      for (const [k, v] of Object.entries(row)) {
+        const mapped = mapKey(k);
+        result[mapped] = v !== undefined && v !== null ? String(v) : '______';
+      }
+      ['name', 'idnumber', 'position', 'code', 'number', 'lottery'].forEach(f => {
+        if (!result[f]) result[f] = '______';
+      });
+      return result;
+    }
+
+    // ===== 导入xls =====
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(firstSheet);
+          if (!json || json.length === 0) {
+            alert('数据为空');
+            return;
+          }
+
+          const normalized = json.map(row => normalizeRow(row));
+          renderAllPages(normalized);
+        } catch (err) {
+          alert('解析错误: ' + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    fileInput.addEventListener('change', function(e) {
+      if (this.files && this.files.length > 0) {
+        handleFile(this.files[0]);
+      }
+      this.value = '';
+    });
+
+    // ===== 生成示例数据 =====
+    function generateSampleData(count) {
+      const surnames = ['张', '王', '李', '刘', '陈', '杨', '赵', '黄', '周', '吴'];
+      const givenNames = ['伟', '芳', '敏', '静', '丽', '强', '磊', '洋', '勇', '艳'];
+      const positions = ['小学语文', '初中语文', '高中语文',];
+      const codes = ['A1001', 'A1002', 'B2001', 'B2002', 'C3001'];
+
+      const data = [];
+      for (let i = 0; i < count; i++) {
+        const s = surnames[i % surnames.length];
+        const g = givenNames[(i * 3) % givenNames.length];
+        const name = s + g;
+        const idNum = '1' + String(100000000000000 + i * 1234567).slice(0, 17) + ['X', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'][i % 11];
+        data.push({
+          name: name,
+          idnumber: idNum,
+          position: positions[i % positions.length],
+          code: codes[i % codes.length] + String(i + 1).padStart(2, '0'),
+          number: '2025-' + String(i + 1).padStart(4, '0'),
+          lottery: ''
+        });
+      }
+      return data;
+    }
+
+    // ===== 示例数据按钮 =====
+    document.getElementById('loadSampleBtn').addEventListener('click', function() {
+      const data = generateSampleData(2);
+      renderAllPages(data);
+    });
+
+    // ===== 保存为PDF（逐页渲染） =====
+    savePdfBtn.addEventListener('click', async function() {
+      const pages = container.querySelectorAll('.page-container');
+      if (pages.length === 0) {
+        alert('没有数据，请先导入准考证数据');
+        return;
+      }
+
+      // 显示加载遮罩
+      pdfLoading.style.display = 'flex';
+      pdfProgress.textContent = '准备中...';
+
+      try {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const totalPages = pages.length;
+
+        for (let i = 0; i < totalPages; i++) {
+          pdfProgress.textContent = `正在渲染第 ${i + 1}/${totalPages} 页...`;
+
+          const page = pages[i];
+          // 克隆页面
+          const clone = page.cloneNode(true);
+          clone.style.boxShadow = 'none';
+          clone.style.borderRadius = '0';
+          clone.style.margin = '0';
+          clone.style.padding = '1cm';
+          clone.style.width = '210mm';
+          clone.style.minHeight = '297mm';
+          clone.style.position = 'relative';
+          clone.style.background = 'white';
+
+          // 移除页码
+          const pageNum = clone.querySelector('.page-number');
+          if (pageNum) pageNum.style.display = 'none';
+
+          // 临时添加到页面
+          const tempDiv = document.createElement('div');
+          tempDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:210mm;';
+          tempDiv.appendChild(clone);
+          document.body.appendChild(tempDiv);
+
+          // 使用 html2canvas 渲染（降低质量以减小文件）
+          const canvas = await html2canvas(clone, {
+            scale: 1.2,
+            useCORS: true,
+            letterRendering: true,
+            width: 210 * 3.7795,
+            height: 297 * 3.7795,
+            backgroundColor: '#ffffff',
+            logging: false,
+            allowTaint: true
+          });
+
+          document.body.removeChild(tempDiv);
+
+          // 转为 JPEG 并添加（降低质量）
+          const imgData = canvas.toDataURL('image/jpeg', 0.75);
+
+          if (i > 0) {
+            pdf.addPage();
+          }
+          pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+        }
+
+        pdfProgress.textContent = '正在保存文件...';
+        pdf.save('准考证.pdf');
+
+        pdfLoading.style.display = 'none';
+      } catch (err) {
+        console.error('PDF生成失败:', err);
+        pdfLoading.style.display = 'none';
+        alert('PDF生成失败，请重试或使用打印功能');
+      }
+    });
+
+    // ===== 初始状态 =====
+    window.addEventListener('load', function() {
+      const data = generateSampleData(2);
+      renderAllPages(data);
+    });
+  })();
+</script>
+</body>
+</html>
